@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dts_file_reader"
+version = "1.0.2"
+authors = [{name="josef ling", email="jling@mrn.org" }]
+description = "Read DTS data files (v4)"
+readme = "README.md"
+requires-python = ">=3.7"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+  "numpy",
+  "scipy"
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["dts_file_reader*"]
+exclude = ["dts_file_reader.venv*"]
+namespaces = false

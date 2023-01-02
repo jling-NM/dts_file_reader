@@ -1,0 +1,11 @@
+LICENSE
+README.md
+pyproject.toml
+dts_file_reader/__init__.py
+dts_file_reader/slice.py
+dts_file_reader/test.py
+dts_file_reader.egg-info/PKG-INFO
+dts_file_reader.egg-info/SOURCES.txt
+dts_file_reader.egg-info/dependency_links.txt
+dts_file_reader.egg-info/requires.txt
+dts_file_reader.egg-info/top_level.txt
