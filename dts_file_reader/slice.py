@@ -354,7 +354,7 @@ def get_data_summary(method: str, sample_rate_hz: int, data=None):
                 # the last ditch peak vel must be between 10 and 340 rad/s
                 # the low value may need to be reduced but anything greater than 350 makes no sense
                 # in our application
-                if (summary_data.peak_vel.value < 10) or (summary_data.peak_vel.value > 340):
+                if (summary_data.peak_vel.value is not None) and ((summary_data.peak_vel.value < 10) or (summary_data.peak_vel.value > 340)):
                     print("dts_file_reader.get_summary(" + method + "): peak value " + str(summary_data.peak_vel.value) + " outside of range(10-340).")
                     # just return an empty/default Summary
                     summary_data = Channel.Summary()
@@ -434,6 +434,7 @@ def get_data_summary(method: str, sample_rate_hz: int, data=None):
                     sample_rate_hz / 1000)
         summary_data.peak_vel.value = data[summary_data.peak_index]
 
+        # remove and bring down range check to here
         # if peak vel is below 1 rad/s, return an empty Summary
         if summary_data.peak_vel.value < 1.0:
             summary_data = Channel.Summary()
