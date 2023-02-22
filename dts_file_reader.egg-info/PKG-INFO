@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: dts-file-reader
-Version: 1.0.2
+Version: 1.0.3
 Summary: Read DTS data files (v4)
 Author-email: josef ling <jling@mrn.org>
 Classifier: Programming Language :: Python :: 3
@@ -12,4 +12,140 @@ License-File: LICENSE
 
 # DTS data file reader
 
-DTS data file reader. Slice or Data Pro
+Reads XML/binary DTS file format.
+There appear to be two DTS file formats, Sliceware or Data Pro.
+This repository only implements a reader for Slice files since I don't have Pro files to test.
+For specs on file format see docs directory or the DTS website.
+
+#### Sliceware files: 
+- Sliceware output consists of an XML file with a "dts" file extension and "chn" binary files for each sensor channel. 
+- The parser expects the "dts" file from which it will read the "chn" files.
+
+#### Data Pro files: 
+- Not implemented but spec is listed in docs directory and very similar to Slice.
+
+For information on DTS see: https://dtsweb.com/
+
+# Usage
+```commandline
+Files:
+some_file_01.dts
+some_file_01.0.chn
+some_file_01.1.chn
+some_file_02.dts
+some_file_02.0.chn
+some_file_02.1.chn
+```
+
+```python
+from dts_file_reader import slice
+channel_data = slice.Reader().parse('some_file_01.dts')
+```
+or
+```python
+from dts_file_reader import slice
+reader = slice.Reader()
+
+data1 = reader.parse('some_file_01.dts')
+data2 = reader.parse('some_file_02.dts')
+```
+
+```doctest
+NAME
+    slice
+
+DESCRIPTION
+    # -*- coding: utf-8 -*-
+    #
+    #  DTS Slice data file(v4) reader
+    #
+    #  author: josef ling (jling@mrn.org)
+    #
+    #  Copyright (C) 2022  josef ling
+    #  This program is free software: you can redistribute it and/or modify
+    #  it under the terms of the GNU General Public License as published by
+    #  the Free Software Foundation, either version 3 of the License, or
+    #  (at your option) any later version.
+    #  This program is distributed in the hope that it will be useful,
+    #  but WITHOUT ANY WARRANTY; without even the implied warranty of
+    #  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    #  GNU General Public License for more details.
+    #  You should have received a copy of the GNU General Public License
+    #  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+CLASSES
+    builtins.object
+        Channel
+        Reader
+    
+    class Channel(builtins.object)
+     |  Channel(number: int)
+     |  
+     |  Methods defined here:
+     |  
+     |  __init__(self, number: int)
+     |      Initialize self.  See help(type(self)) for accurate signature.
+     |  
+     |  __repr__(self)
+     |      Return repr(self).
+     |  
+     |  get_channel_summary(self, method: str)
+     |      Summary parameters for channel data
+     |      @return:
+     |  
+     |  get_filtered_data(self, cfc: object = None, start: int = 0, stop: int = 0) -> numpy.ndarray
+     |      Return a range of filtered single channel data or all of it
+     |      
+     |      BUTTERWORTH 4-POLE PHASELESS DIGITAL FILTER outlined in Appendix C of the
+     |      SAE-J211 (revMARCH95) standard.
+     |      <http://standards.sae.org/j211/1_201403/>
+     |      
+     |      :param cfc:
+     |      :param stop:
+     |      :param start:
+     |      :rtype: object
+     |  
+     |  ----------------------------------------------------------------------
+     |  Data descriptors defined here:
+     |  
+     |  __dict__
+     |      dictionary for instance variables (if defined)
+     |  
+     |  __weakref__
+     |      list of weak references to the object (if defined)
+     |  
+     |  ----------------------------------------------------------------------
+     |  Data and other attributes defined here:
+     |  
+     |  Meta = <class 'slice.Channel.Meta'>
+     |  
+     |  Summary = <class 'slice.Channel.Summary'>
+    
+    class Reader(builtins.object)
+     |  Parse DTS meta file with extension '*.dts'
+     |  Selfishly only returning the metadata attributes i am interested in, not all that are available
+     |  
+     |  Methods defined here:
+     |  
+     |  __init__(self)
+     |      Initialize self.  See help(type(self)) for accurate signature.
+     |  
+     |  parse(self, i_file_path: str)
+     |      @type i_file_path: object
+     |  
+     |  ----------------------------------------------------------------------
+     |  Data descriptors defined here:
+     |  
+     |  __dict__
+     |      dictionary for instance variables (if defined)
+     |  
+     |  __weakref__
+     |      list of weak references to the object (if defined)
+
+FUNCTIONS
+    get_data_summary(method: str, sample_rate_hz: int, data=None)
+        For input data, return summary parameters based on methodology
+    
+    get_resultant(channels, channel_nums, start=0, stop=0)
+
+```

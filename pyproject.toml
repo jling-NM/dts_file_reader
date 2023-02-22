@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "dts_file_reader"
-version = "1.0.2"
+version = "1.0.3"
 authors = [{name="josef ling", email="jling@mrn.org" }]
 description = "Read DTS data files (v4)"
 readme = "README.md"
