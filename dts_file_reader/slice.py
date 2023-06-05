@@ -70,9 +70,10 @@ class Channel:
             self.fwhm = self.Attribute(None, 'ms')
             self.delta_t = self.Attribute(None, 'ms')
             self.rise_to_peak_slope = 0
+            self.is_peak_user_selected = 0
 
         def __repr__(self):
-            return "Channel Summary:\npeak_index:{}\nmin_index:{}\nrise_start_index:{}\nrise_end_index:{}\npeak_vel:{} {}\nfwhm:{} {}\nslope:{}".format(
+            return "Channel Summary:\npeak_index:{}\nmin_index:{}\nrise_start_index:{}\nrise_end_index:{}\npeak_vel:{} {}\nfwhm:{} {}\nslope:{}\npeak_user_selected:{}".format(
                 self.peak_index,
                 self.min_index,
                 self.rise_start_index,
@@ -81,7 +82,8 @@ class Channel:
                 self.peak_vel.unit,
                 self.fwhm.value,
                 self.fwhm.unit,
-                self.rise_to_peak_slope
+                self.rise_to_peak_slope,
+                bool(self.is_peak_user_selected)
             )
 
     # channel constructor
@@ -152,6 +154,7 @@ class Channel:
                                                  )
 
         return self.summary_data
+
 
 
 def OLD_get_data_summary(method: str, sample_rate_hz: int, data=None):
@@ -458,9 +461,11 @@ def OLD_get_data_summary(method: str, sample_rate_hz: int, data=None):
 
 
 def get_data_summary(method: str, sample_rate_hz: int, data=None):
-    """ For input data, return summary parameters based on methodology """
+    """ For input data, return summary parameters based on methodology
 
-    from scipy.signal import find_peaks
+        This method is not for channel data only, it can be used on resultant data (a derivative of multiple channels).
+        That is why it is not a channel memember.
+    """
 
     #######################################################################
     # initiate summary instance
@@ -470,6 +475,57 @@ def get_data_summary(method: str, sample_rate_hz: int, data=None):
     #######################################################################
     # Find peak
     #######################################################################
+    set_peak(summary_data, method, data)
+
+    #######################################################################
+    # Find rise start index
+    #######################################################################
+    set_rise_start(summary_data, data)
+
+    #######################################################################
+    # Find rise end index
+    #######################################################################
+    set_rise_end(summary_data, data)
+
+    #######################################################################
+    # delta_t
+    #######################################################################
+    set_delta_t(summary_data, sample_rate_hz)
+
+    #######################################################################
+    # fwhm
+    #######################################################################
+    set_fwhm(summary_data, sample_rate_hz, data)
+
+    #######################################################################
+    # time_to_peak
+    #######################################################################
+    set_time_to_peak(summary_data, sample_rate_hz)
+
+    #######################################################################
+    # decel_time
+    #######################################################################
+    set_decel_time(summary_data, sample_rate_hz)
+
+    #######################################################################
+    # peak_velocity
+    #######################################################################
+    set_peak_vel(summary_data, data)
+
+    #######################################################################
+    # slope of line fit to data between rise start and peak
+    #######################################################################
+    set_slope(summary_data, data)
+
+    return summary_data
+
+
+def set_peak(summary_data: Channel.Summary, method: str, data=None):
+    """
+    Find peak
+    """
+    from scipy.signal import find_peaks
+
     if method == 'head':
         find_peaks_rounds = {
             '1': {'height': (100.0, None), 'rel_height': 0.5, 'threshold': (None, 1.0), 'width': (20, None)},
@@ -478,7 +534,8 @@ def get_data_summary(method: str, sample_rate_hz: int, data=None):
         }
     elif method == 'machine':
         find_peaks_rounds = {
-            '1': {'height': (100, None), 'rel_height': 0.5, 'threshold': (None, 1.0), 'width': (50, None), 'prominence': (2, 100)},
+            '1': {'height': (100, None), 'rel_height': 0.5, 'threshold': (None, 1.0), 'width': (50, None),
+                  'prominence': (2, 100)},
             '2': {'height': (100, None), 'threshold': (None, 0.3), 'width': (20, None)},
             '3': {'height': (20, None), 'threshold': (None, None), 'width': (7, None), 'prominence': (2, 250)}
         }
@@ -486,11 +543,11 @@ def get_data_summary(method: str, sample_rate_hz: int, data=None):
         raise RuntimeError('Method ' + method + ' is not valid.')
 
     for round_num, settings_str in find_peaks_rounds.items():
-        #print(f"dts_file_reader.get_summary('{method}') : Peak identification attempt {round_num} : {settings_str}")
+        # print(f"dts_file_reader.get_summary('{method}') : Peak identification attempt {round_num} : {settings_str}")
         peaks, peak_props = find_peaks(data, **settings_str)
 
         if len(peak_props['peak_heights']) != 0:
-            #print(peak_props)
+            # print(peak_props)
             summary_data.peak_index = peaks[np.argmax(peak_props['peak_heights'])]
             summary_data.min_index = np.argmin(data[summary_data.peak_index:]) + summary_data.peak_index
             break
@@ -503,14 +560,19 @@ def get_data_summary(method: str, sample_rate_hz: int, data=None):
         # the low value may need to be reduced but anything greater than 350 makes no sense
         # in our application
         if (summary_data.peak_vel.value < 10) or (summary_data.peak_vel.value > 340):
-            print("dts_file_reader.get_summary(" + method + "): peak value " + str(summary_data.peak_vel.value) + " outside of range(10-340).")
+            print("dts_file_reader.get_summary(" + method + "): peak value " + str(
+                summary_data.peak_vel.value) + " outside of range(10-340).")
             # just return an empty/default Summary
             summary_data = Channel.Summary()
             return summary_data
 
-    #######################################################################
-    # Find rise start index
-    #######################################################################
+    return summary_data
+
+
+def set_rise_start(summary_data: Channel.Summary, data=None):
+    """
+    Find rise start index
+    """
     # CHOP recommendation 2019: 5% of peak defines rise_start, rise_end, and delta_t
     # five_pct_of_peak_value = data[summary_data.peak_index] * 0.05
     # # take first occurance greater than zero
@@ -533,18 +595,25 @@ def get_data_summary(method: str, sample_rate_hz: int, data=None):
     # method 2
     # this method moves 25 ms before the peak index and works forward until it finds a single sample exceeding 3 stdev
     # because of noise, this has to be smoothed or it hits too early on noise
-    data_convolved = np.convolve(data[(summary_data.peak_index-1000):summary_data.peak_index],
+    data_convolved = np.convolve(data[(summary_data.peak_index - 1000):summary_data.peak_index],
                                  np.array([0.1, 0.1, 0.1, 0.1]),
                                  mode='same')
     three_stdev_cutoff_index = np.where(data_convolved > three_stdev_cutoff)[0][0]
     summary_data.rise_start_index = three_stdev_cutoff_index + summary_data.peak_index - 1000
 
-    #######################################################################
-    # Find rise end index
-    #######################################################################
-    # summary_data.rise_end_index = (np.where(
-    #     (data[summary_data.peak_index:summary_data.min_index] - five_pct_of_peak_value) < 0) + summary_data.peak_index)[0, 0]
-    summary_data.rise_end_index = (np.where((data[summary_data.peak_index:summary_data.min_index] - three_stdev_cutoff) < 0) + summary_data.peak_index)[0, 0]
+    return summary_data
+
+
+def set_rise_end(summary_data: Channel.Summary, data=None):
+    """
+    Find rise end index
+    """
+    # 5% peak for rise_start is too peak dependent, use 3 stdev instead
+    three_stdev_cutoff = np.std(data[0:10000]) * 3
+
+    summary_data.rise_end_index = (np.where(
+        (data[summary_data.peak_index:summary_data.min_index] - three_stdev_cutoff) < 0) + summary_data.peak_index)[
+        0, 0]
 
     a = data[summary_data.peak_index:summary_data.rise_end_index]
     signal_drop = np.where(np.logical_and(a < 0.5, a > -0.5)) + summary_data.peak_index
@@ -552,18 +621,26 @@ def get_data_summary(method: str, sample_rate_hz: int, data=None):
     if is_signal_drop_around_rise_end:
         # print("signal drop detected")
         # get first point from left to right that crosses zero after subtracting 5% peak height
-        # two know cases where signal cut out briefly before rise end. So, we change the search space.
+        # two known cases where signal cut out briefly before rise end. So, we change the search space.
         # instead of search from peak to trough as before, we find last point that is above 5% and add one for rise_end_index
-        summary_data.rise_end_index = (np.where((data[summary_data.peak_index:summary_data.min_index] - three_stdev_cutoff) > 0) + summary_data.peak_index)[0][-1] + 1
+        summary_data.rise_end_index = (np.where(
+            (data[summary_data.peak_index:summary_data.min_index] - three_stdev_cutoff) > 0) + summary_data.peak_index)[
+                                          0][-1] + 1
 
-    #######################################################################
-    # delta_t is time in milleseconds between rise_start and rise_end
-    #######################################################################
+    return summary_data
+
+
+def set_delta_t(summary_data: Channel.Summary, sample_rate_hz: int):
+    """
+    delta_t is time in milleseconds between rise_start and rise_end
+    """
     summary_data.delta_t.value = (summary_data.rise_end_index - summary_data.rise_start_index) / (sample_rate_hz / 1000)
+    return summary_data
 
-    #######################################################################
-    # fwhm
-    #######################################################################
+
+def set_fwhm(summary_data: Channel.Summary, sample_rate_hz: int, data):
+    """
+    """
     fifty_pct_of_peak_value = data[summary_data.peak_index] * 0.50
 
     # new method look at line intersections
@@ -591,16 +668,28 @@ def get_data_summary(method: str, sample_rate_hz: int, data=None):
 
     summary_data.fwhm.value = (fwhm_right_ips - fwhm_left_ips) / (sample_rate_hz / 1000)
 
-    #######################################################################
-    # populate values based on final indices
-    #######################################################################
-    summary_data.time_to_peak.value = (summary_data.peak_index - summary_data.rise_start_index) / (sample_rate_hz / 1000)
-    summary_data.decel_time.value = (summary_data.rise_end_index - summary_data.peak_index) / (sample_rate_hz / 1000)
-    summary_data.peak_vel.value = data[summary_data.peak_index]
+    return summary_data
 
-    #######################################################################
-    # Calculate slope of line fit to data between rise start and peak
-    #######################################################################
+
+def set_time_to_peak(summary_data: Channel.Summary, sample_rate_hz: int):
+    summary_data.time_to_peak.value = (summary_data.peak_index - summary_data.rise_start_index) / (sample_rate_hz / 1000)
+    return summary_data
+
+
+def set_decel_time(summary_data: Channel.Summary, sample_rate_hz: int):
+    summary_data.decel_time.value = (summary_data.rise_end_index - summary_data.peak_index) / (sample_rate_hz / 1000)
+    return summary_data
+
+
+def set_peak_vel(summary_data: Channel.Summary, data):
+    summary_data.peak_vel.value = data[summary_data.peak_index]
+    return summary_data
+
+
+def set_slope(summary_data: Channel.Summary, data):
+    """
+    Calculate slope of line fit to data between rise start and peak
+    """
     slope_calc_x = np.arange(summary_data.rise_start_index, summary_data.peak_index)
     slope, intercept = np.polyfit(
         slope_calc_x,
@@ -609,6 +698,18 @@ def get_data_summary(method: str, sample_rate_hz: int, data=None):
     )
     # add slope to summary
     summary_data.rise_to_peak_slope = slope
+
+    return summary_data
+
+
+def set_user_selected_peak(summary_data: Channel.Summary, data, sample_rate_hz: int, user_selected_peak_index: int):
+    summary_data.peak_index = user_selected_peak_index
+    summary_data.is_peak_user_selected = 1
+    summary_data = set_fwhm(summary_data, sample_rate_hz, data)
+    summary_data = set_time_to_peak(summary_data, sample_rate_hz)
+    summary_data = set_decel_time(summary_data, sample_rate_hz)
+    summary_data = set_peak_vel(summary_data, data)
+    summary_data = set_slope(summary_data, data)
 
     return summary_data
 
