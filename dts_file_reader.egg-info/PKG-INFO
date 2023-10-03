@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: dts-file-reader
-Version: 1.1.0
+Version: 1.2.0
 Summary: Read DTS data files (v4)
 Author-email: josef ling <jling@mrn.org>
 Classifier: Programming Language :: Python :: 3
@@ -9,6 +9,8 @@ Classifier: Operating System :: OS Independent
 Requires-Python: >=3.7
 Description-Content-Type: text/markdown
 License-File: LICENSE
+Requires-Dist: numpy
+Requires-Dist: scipy
 
 # DTS data file reader
 
