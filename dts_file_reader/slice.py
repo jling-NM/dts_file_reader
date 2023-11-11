@@ -249,12 +249,20 @@ def set_peak(summary_data: Channel.Summary, method: str, data=None):
         #     '2': {'height': (100, None), 'threshold': (None, 0.3), 'width': (20, None)},
         #     '3': {'height': (20, None), 'threshold': (None, None), 'width': (7, None), 'prominence': (2, 250)}
         # }
+
+        # this worked for all previous experiments(except 'legacy') until the Oct 2023 AE experiments
+        # find_peaks_rounds = {
+        #     '1': {'height': (100, 280), 'rel_height': 0.5, 'threshold': (None, 0.5), 'width': (50, None), 'prominence': (2, 15), 'distance': 25},
+        #     '2': {'height': (100, 280), 'rel_height': 0.5, 'threshold': (None, 0.5), 'width': (None, None), 'prominence': (11, 15), 'distance': 25},
+        #     '3': {'height': (100, 280), 'rel_height': 0.5, 'threshold': (None, 1.0), 'width': (30, 250), 'prominence': (10, 250), 'distance': 25},
+        #     '4': {'height': (100, 280), 'rel_height': 0.5, 'threshold': (None, 1.0), 'width': (50, None), 'prominence': (2, 250), 'distance': 25},
+        #     '5': {'height': (100, 280), 'threshold': (None, 0.3), 'width': (10, None), 'prominence': (2, 100), 'distance': 25}
+        # }
+
+        # tuned for Oct 2023 AE experiments
+        # waiting for feedback from lab if any changes needed. This leaves more to manual selection which is maybe how it should be
         find_peaks_rounds = {
-            '1': {'height': (100, 280), 'rel_height': 0.5, 'threshold': (None, 0.5), 'width': (50, None), 'prominence': (2, 15), 'distance': 25},
-            '2': {'height': (100, 280), 'rel_height': 0.5, 'threshold': (None, 0.5), 'width': (None, None), 'prominence': (11, 15), 'distance': 25},
-            '3': {'height': (100, 280), 'rel_height': 0.5, 'threshold': (None, 1.0), 'width': (30, 250), 'prominence': (10, 250), 'distance': 25},
-            '4': {'height': (100, 280), 'rel_height': 0.5, 'threshold': (None, 1.0), 'width': (50, None), 'prominence': (2, 250), 'distance': 25},
-            '5': {'height': (100, 280), 'threshold': (None, 0.3), 'width': (10, None), 'prominence': (2, 100), 'distance': 25}
+            '1': {'height': (150, 280), 'width': (None, None), 'rel_height': 0.1, 'threshold': (None, 2.0)}
         }
     else:
         raise RuntimeError('Method ' + method + ' is not valid.')
@@ -262,17 +270,25 @@ def set_peak(summary_data: Channel.Summary, method: str, data=None):
     # attempt some rounds of peak parameters
     for round_num, settings_str in find_peaks_rounds.items():
         # INFO
-        #print(f"dts_file_reader.get_summary('{method}') : Peak identification attempt {round_num} : {settings_str}")
+        #if method == 'machine':
+        #    print(f"dts_file_reader.get_summary('{method}') : Peak identification attempt {round_num} : {settings_str}")
         # INFO
 
         peaks, peak_props = find_peaks(data, **settings_str)
         # INFO
-        #print(peak_props)
+        #if method == 'machine':
+            #print(peak_props['peak_heights'], peak_props['widths'])
+        #    print(peak_props)
         # INFO
 
         if len(peak_props['peak_heights']) != 0:
             # grab the highest peak of those returned
             summary_data.peak_index = peaks[np.argmax(peak_props['peak_heights'])]
+
+            # of the available peaks, use the one that is widest
+            #summary_data.peak_index = peaks[np.argmax(peak_props['widths'])]
+
+            # min index just the lowest value after the peak index define above
             summary_data.min_index = np.argmin(data[summary_data.peak_index:]) + summary_data.peak_index
             break
 
@@ -318,8 +334,21 @@ def set_rise_start(summary_data: Channel.Summary, data=None):
     data_convolved = np.convolve(data[(summary_data.peak_index - 1000):summary_data.peak_index],
                                  np.array([0.1, 0.1, 0.1, 0.1]),
                                  mode='same')
-    three_stdev_cutoff_index = np.where(data_convolved > three_stdev_cutoff)[0][0]
-    summary_data.rise_start_index = three_stdev_cutoff_index + summary_data.peak_index - 1000
+
+    # first capture data exceeding threshold
+    exceed_three_stdev = np.where(data_convolved > three_stdev_cutoff)[0]
+    # if we don't any return then the data is probably bad
+    if exceed_three_stdev.shape[0] == 0:
+        summary_data.rise_start_index = 0
+        raise(Exception("Failed to identify rise_start_index"))
+    else:
+        three_stdev_cutoff_index = exceed_three_stdev[0]
+        summary_data.rise_start_index = three_stdev_cutoff_index + summary_data.peak_index - 1000
+
+    #print(summary_data.rise_start_index)
+    # this can fail if no values returned
+    #three_stdev_cutoff_index = np.where(data_convolved > three_stdev_cutoff)[0][0]
+    #summary_data.rise_start_index = three_stdev_cutoff_index + summary_data.peak_index - 1000
 
     return summary_data
 
@@ -597,10 +626,14 @@ class Reader:
                             int(data_zero_level_adc) / float(scalefactor_eu) * float(scalefactor_mv))
 
                     # If units are deg/sec convert to radians
-                    if channel.meta_data.eu == 'Deg/sec':
+                    if channel.meta_data.eu.lower() == 'deg/sec':
                         # channel.scaled_data = np.multiply(channel.scaled_data, (np.pi / 180))
                         channel.scaled_data = np.multiply(channel.scaled_data, 0.017453292519943295)
-                        channel.meta_data.eu = 'Rad/s'
+                        channel.meta_data.eu = 'rad/s'
+                    elif channel.meta_data.eu.lower() == 'g':
+                        pass
+                    else:
+                        raise ValueError(f'Error in dts file.\nExpected channel {channel.meta_data.serial_number} Eu parameter to be "deg/sec" or "g".')
 
                     # For proportional channels adjust for excitation voltage
                     if channel.meta_data.is_proportional_to_excitation:
